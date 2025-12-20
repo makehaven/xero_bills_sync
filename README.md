@@ -50,9 +50,27 @@ Add the following fields to your entity type (or specific bundles). The machine 
 | **Amount** | `field_amount` | Decimal | The total amount to be paid. |
 | **Status** | `field_status` | List (text) | **Allowed values:**<br>`draft\|Draft`<br>`submitted\|Submitted`<br>`paid\|Paid`<br><br>*The sync only triggers when saved as **Submitted**.* |
 | **Attachment** | `field_attachment` | File | For uploading receipts or invoices. |
+| **Description** | `field_description` | Text (long) | **Optional.** Provides more detail than the Title. Xero Line Item = "Title - Description". |
 | **Xero Invoice ID** | `field_xero_invoice_id` | Text (plain) | **Internal use.** Stores the Xero GUID. <br>*(Note: Xero uses the `Invoice` endpoint for both Bills and Invoices. A Bill is simply an Invoice with type `ACCPAY`.)* |
 
-### 4. Module Configuration
+### 4. Optional: Hourly Calculator (Contractors)
+
+To enable the "Hours * Rate" calculator for contractor payments:
+
+1.  **On the Payment Request entity:** Add `field_hours` (Decimal) and `field_hourly_rate` (Decimal) to the `fee` bundle.
+2.  **On the User entity:** Add `field_default_hourly_rate` (Decimal).
+    *   *Effect:* When a user creates a new request, their default rate is auto-filled. As they type hours, the `Amount` field updates automatically.
+
+### 5. Optional: Advanced Fields (Payee & Account Codes)
+
+To allow assigning requests to others or selecting specific Xero accounts:
+
+1.  **Payee Override:** Add `field_payee` (Entity reference: User) to the Payment Request.
+    *   *Effect:* If set, the bill is created for this user (Xero Contact) instead of the Author. Staff can use this to create requests on behalf of contractors.
+2.  **Account Code Override:** Add `field_xero_account_id_reimburse` and/or `field_xero_account_id_payment` (Text/Select list) to the relevant bundles.
+    *   *Effect:* If these fields have a value, that value is used as the Xero Account Code (e.g., `610`), overriding the module's global mapping.
+
+### 6. Module Configuration
 
 1.  Go to **Configuration > Web Services > Xero Bills Sync** (`/admin/config/services/xero-bills-sync`).
 2.  **Attachment Field:** Confirm this matches the field name you created above (default: `field_attachment`).

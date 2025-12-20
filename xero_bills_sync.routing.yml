@@ -5,3 +5,12 @@ xero_bills_sync.settings_form:
     _title: 'Xero Bills Sync Settings'
   requirements:
     _permission: 'administer site configuration'
+
+xero_bills_sync.add_request:
+  path: '/user/{user}/payment-requests/add/{bundle}'
+  defaults:
+    _controller: '\Drupal\xero_bills_sync\Controller\PaymentRequestController::add'
+    _title: 'Create Payment Request'
+  requirements:
+    _permission: 'access content'
+    user: \d+

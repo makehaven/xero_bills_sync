@@ -89,26 +89,49 @@ class SyncManager {
       return;
     }
 
-    // Get Xero Contact ID from user.
-    $owner = $entity->getOwner();
-    if (!$owner instanceof UserInterface) {
-      $this->logger->error('Payment request @id has no valid owner.', ['@id' => $entity->id()]);
+    // Determine the Payee (User).
+    // 1. Check if 'field_payee' is set.
+    $payee = NULL;
+    if ($entity->hasField('field_payee') && !$entity->get('field_payee')->isEmpty()) {
+      $payee = $entity->get('field_payee')->entity;
+    }
+
+    // 2. Fallback to Owner (Authored by) if payee is not set.
+    if (!$payee instanceof UserInterface) {
+      $payee = $entity->getOwner();
+    }
+
+    if (!$payee instanceof UserInterface) {
+      $this->logger->error('Payment request @id has no valid payee or owner.', ['@id' => $entity->id()]);
       return;
     }
 
-    $xero_contact_id = $this->getXeroContactId($owner);
+    $xero_contact_id = $this->getXeroContactId($payee);
 
     if (!$xero_contact_id) {
       $this->logger->error('Could not find Xero Contact ID for user @user (UID: @uid)', [
-        '@user' => $owner->getDisplayName(),
-        '@uid' => $owner->id(),
+        '@user' => $payee->getDisplayName(),
+        '@uid' => $payee->id(),
       ]);
       return;
     }
 
-    $bundle = $entity->bundle();
-    $mappings = $this->config->get('mappings') ?: [];
-    $account_code = $mappings[$bundle] ?? '600';
+    // Determine Account Code.
+    // 1. Check entity override fields.
+    $account_code = NULL;
+    if ($entity->hasField('field_xero_account_id_reimburse') && !$entity->get('field_xero_account_id_reimburse')->isEmpty()) {
+      $account_code = $entity->get('field_xero_account_id_reimburse')->value;
+    }
+    elseif ($entity->hasField('field_xero_account_id_payment') && !$entity->get('field_xero_account_id_payment')->isEmpty()) {
+      $account_code = $entity->get('field_xero_account_id_payment')->value;
+    }
+
+    // 2. Fallback to module configuration mapping.
+    if (empty($account_code)) {
+      $bundle = $entity->bundle();
+      $mappings = $this->config->get('mappings') ?: [];
+      $account_code = $mappings[$bundle] ?? '600';
+    }
 
     $amount = 0;
     if ($entity->hasField('field_amount')) {
@@ -116,8 +139,12 @@ class SyncManager {
     }
 
     // Prepare Invoice (Bill) payload.
-    // Note: Xero requires "Invoices" root key when posting JSON in some contexts, 
-    // but typically raw body is the invoice(s).
+    // 1. Build Description
+    $line_description = $entity->label() ?: 'Payment Request #' . $entity->id();
+    if ($entity->hasField('field_description') && !$entity->get('field_description')->isEmpty()) {
+      $line_description .= ' - ' . strip_tags($entity->get('field_description')->value);
+    }
+
     $invoice_data = [
       'Type' => 'ACCPAY',
       'InvoiceNumber' => 'PAYREQ-' . $entity->id(),
@@ -130,7 +157,7 @@ class SyncManager {
       'Status' => 'SUBMITTED',
       'LineItems' => [
         [
-          'Description' => $entity->label() ?: 'Payment Request #' . $entity->id(),
+          'Description' => $line_description,
           'Quantity' => 1,
           'UnitAmount' => $amount,
           'AccountCode' => $account_code,
@@ -139,11 +166,6 @@ class SyncManager {
     ];
 
     try {
-      // Create Invoice in Xero.
-      // We pass the invoice wrapped in an array or not? Xero often accepts a list.
-      // Usually POST /Invoices expects { "Invoices": [ ... ] } or just the array if handled by library.
-      // Let's assume standard Xero API JSON structure.
-      
       $payload = [
         'Invoices' => [$invoice_data]
       ];
@@ -257,8 +279,6 @@ class SyncManager {
           $mime_type = $file->getMimeType();
           
           // Xero Attachment Endpoint: POST /Invoices/{Guid}/Attachments/{Filename}
-          // The filename should be URL encoded if it contains special characters, 
-          // but typically simple filenames are best.
           $endpoint = "Invoices/$invoice_id/Attachments/" . rawurlencode($filename);
 
           $this->xeroClient->request('POST', $endpoint, [

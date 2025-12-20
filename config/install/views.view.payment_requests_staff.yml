@@ -474,7 +474,6 @@ display:
         type: fields
       query:
         type: views_query
-      relationships: {  }
       header: {  }
       footer: {  }
       display_extenders: {  }

@@ -1,0 +1,13 @@
+payment_calculator:
+  version: 1.x
+  js:
+    js/payment_calculator.js: {}
+  dependencies:
+    - core/jquery
+    - core/drupal
+
+payment_form_style:
+  version: 1.x
+  css:
+    theme:
+      css/payment_form.css: {}

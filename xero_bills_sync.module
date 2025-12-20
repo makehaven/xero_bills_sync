@@ -4,3 +4,54 @@
  * @file
  * Primary module hooks for Xero Bills Sync module.
  */
+
+use Drupal\Core\Form\FormStateInterface;
+use Drupal\user\Entity\User;
+
+/**
+ * Implements hook_form_alter().
+ */
+function xero_bills_sync_form_alter(&$form, FormStateInterface $form_state, $form_id) {
+  // Target ECK entity forms. 
+  // Pattern usually: eck_entity_form (generic) or entity_type_bundle_form.
+  $form_object = $form_state->getFormObject();
+  if (!method_exists($form_object, 'getEntity')) {
+    return;
+  }
+
+  $entity = $form_object->getEntity();
+  if ($entity->getEntityTypeId() !== 'payment_request') {
+    return;
+  }
+
+  // 1. Payee Defaulting
+  if ($entity->isNew() && isset($form['field_payee'])) {
+    // If the field exists and has no value, default to current user.
+    if (empty($form['field_payee']['widget'][0]['target_id']['#default_value'])) {
+      $form['field_payee']['widget'][0]['target_id']['#default_value'] = User::load(\Drupal::currentUser()->id());
+    }
+  }
+
+  // 2. Hide "Authored by" if Payee field exists (to avoid confusion).
+  // Only hide it if we are confident the user doesn't need to touch it.
+  if (isset($form['uid']) && isset($form['field_payee'])) {
+    $form['uid']['#access'] = FALSE;
+  }
+
+  // 3. Calculator Logic
+  // Attach the calculator library if the relevant fields exist.
+  if (isset($form['field_hours']) && isset($form['field_hourly_rate'])) {
+    $form['#attached']['library'][] = 'xero_bills_sync/payment_calculator';
+
+    // Pre-fill Hourly Rate from User Profile if entity is new and field is empty.
+    if ($entity->isNew() && empty($entity->get('field_hourly_rate')->value)) {
+      $current_user = User::load(\Drupal::currentUser()->id());
+      if ($current_user->hasField('field_default_hourly_rate') && !$current_user->get('field_default_hourly_rate')->isEmpty()) {
+        $default_rate = $current_user->get('field_default_hourly_rate')->value;
+        if (isset($form['field_hourly_rate']['widget'][0]['value'])) {
+          $form['field_hourly_rate']['widget'][0]['value']['#default_value'] = $default_rate;
+        }
+      }
+    }
+  }
+}
