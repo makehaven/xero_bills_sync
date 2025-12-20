@@ -50,7 +50,7 @@ Add the following fields to your entity type (or specific bundles). The machine 
 | **Amount** | `field_amount` | Decimal | The total amount to be paid. |
 | **Status** | `field_status` | List (text) | **Allowed values:**<br>`draft\|Draft`<br>`submitted\|Submitted`<br>`paid\|Paid`<br><br>*The sync only triggers when saved as **Submitted**.* |
 | **Attachment** | `field_attachment` | File | For uploading receipts or invoices. |
-| **Xero Invoice ID** | `field_xero_invoice_id` | Text (plain) | **Internal use.** Stores the Xero GUID. Hide this from the user form. |
+| **Xero Invoice ID** | `field_xero_invoice_id` | Text (plain) | **Internal use.** Stores the Xero GUID. <br>*(Note: Xero uses the `Invoice` endpoint for both Bills and Invoices. A Bill is simply an Invoice with type `ACCPAY`.)* |
 
 ### 4. Module Configuration
 
