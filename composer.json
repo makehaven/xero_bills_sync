@@ -1,0 +1,11 @@
+{
+    "name": "makehaven/xero_bills_sync",
+    "description": "Synchronizes Drupal ECK payment requests to Xero Accounts Payable bills.",
+    "type": "drupal-custom-module",
+    "license": "GPL-2.0-or-later",
+    "require": {
+        "drupal/eck": "^2.0",
+        "drupal/xero": "^3.1",
+        "drupal/hook_event_dispatcher": "^4.2"
+    }
+}

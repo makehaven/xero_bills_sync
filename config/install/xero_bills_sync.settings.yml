@@ -1,0 +1,4 @@
+attachment_field: 'field_attachment'
+mappings:
+  reimbursement: '610'
+  fee: '600'

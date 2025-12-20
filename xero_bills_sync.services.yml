@@ -1,0 +1,16 @@
+services:
+  xero_bills_sync.sync_manager:
+    class: Drupal\xero_bills_sync\Service\SyncManager
+    arguments:
+      - '@xero.client'
+      - '@entity_type.manager'
+      - '@logger.factory'
+      - '@config.factory'
+      - '@file_system'
+
+  xero_bills_sync.eck_subscriber:
+    class: Drupal\xero_bills_sync\EventSubscriber\EckEntitySubscriber
+    arguments:
+      - '@xero_bills_sync.sync_manager'
+    tags:
+      - { name: event_subscriber }

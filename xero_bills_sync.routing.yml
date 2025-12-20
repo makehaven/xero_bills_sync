@@ -1,0 +1,7 @@
+xero_bills_sync.settings_form:
+  path: '/admin/config/services/xero-bills-sync'
+  defaults:
+    _form: '\Drupal\xero_bills_sync\Form\SettingsForm'
+    _title: 'Xero Bills Sync Settings'
+  requirements:
+    _permission: 'administer site configuration'

@@ -1,0 +1,6 @@
+xero_bills_sync.settings_form:
+  title: 'Xero Bills Sync'
+  description: 'Configure synchronization of payment requests to Xero.'
+  parent: system.admin_config_services
+  route_name: xero_bills_sync.settings_form
+  weight: 10
