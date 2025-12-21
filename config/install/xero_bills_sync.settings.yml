@@ -1,4 +1,5 @@
 attachment_field: 'field_attachment'
+default_hourly_rate: 25.00
 mappings:
   reimbursement: '610'
-  fee: '600'
+  payment: '600'

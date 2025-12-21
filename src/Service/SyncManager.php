@@ -90,19 +90,20 @@ class SyncManager {
     }
 
     // Determine the Payee (User).
-    // 1. Check if 'field_payee' is set.
-    $payee = NULL;
-    if ($entity->hasField('field_payee') && !$entity->get('field_payee')->isEmpty()) {
-      $payee = $entity->get('field_payee')->entity;
-    }
-
-    // 2. Fallback to Owner (Authored by) if payee is not set.
-    if (!$payee instanceof UserInterface) {
-      $payee = $entity->getOwner();
-    }
+    $payee = $this->resolvePayee($entity);
 
     if (!$payee instanceof UserInterface) {
       $this->logger->error('Payment request @id has no valid payee or owner.', ['@id' => $entity->id()]);
+      return;
+    }
+
+    // Duplicate Guardrail
+    if ($this->checkDuplicate($entity, $payee)) {
+      $this->logger->error('Stopped sync for Payment Request @id: Detected duplicate request for Payee @uid with Amount @amount in the last 24h.', [
+        '@id' => $entity->id(),
+        '@uid' => $payee->id(),
+        '@amount' => $entity->get('field_amount')->value,
+      ]);
       return;
     }
 
@@ -205,21 +206,74 @@ class SyncManager {
   }
 
   /**
+   * Checks for duplicate requests in the last 24 hours.
+   * 
+   * @param \Drupal\eck\Entity\EckEntityInterface $entity
+   *   The current request.
+   * @param \Drupal\user\UserInterface $payee
+   *   The resolved payee.
+   * 
+   * @return bool
+   *   TRUE if a duplicate exists, FALSE otherwise.
+   */
+  protected function checkDuplicate(EckEntityInterface $entity, UserInterface $payee) {
+    if (!$entity->hasField('field_amount')) {
+      return FALSE;
+    }
+
+    $amount = $entity->get('field_amount')->value;
+    $time_window = time() - (24 * 60 * 60); // 24 hours ago
+
+    $query = $this->entityTypeManager->getStorage('payment_request')->getQuery()
+      ->accessCheck(FALSE)
+      ->condition('type', $entity->bundle())
+      ->condition('field_amount', $amount)
+      ->condition('created', $time_window, '>=')
+      ->condition('id', $entity->id(), '<>'); // Exclude self
+
+    // Check Payee match. 
+    // If we used field_payee, check that field. Otherwise check author.
+    // To be robust, we check both paths or rely on how we resolve payee.
+    // Since we don't know if existing entities used field_payee or uid, 
+    // we query for EITHER field_payee = payee_id OR uid = payee_id.
+    
+    $group = $query->orConditionGroup()
+      ->condition('uid', $payee->id());
+    
+    // Only check field_payee if it exists on the entity type configuration.
+    // Assuming it does if we are using it here.
+    $group->condition('field_payee', $payee->id());
+    
+    $query->condition($group);
+
+    $count = $query->count()->execute();
+
+    return $count > 0;
+  }
+
+  /**
+   * Helper to resolve the payee from an entity.
+   */
+  protected function resolvePayee(EckEntityInterface $entity) {
+    $payee = NULL;
+    if ($entity->hasField('field_payee') && !$entity->get('field_payee')->isEmpty()) {
+      $payee = $entity->get('field_payee')->entity;
+    }
+
+    if (!$payee instanceof UserInterface) {
+      $payee = $entity->getOwner();
+    }
+    return $payee;
+  }
+
+  /**
    * Retrieves the Xero Contact ID for a Drupal user.
-   *
-   * @param \Drupal\user\UserInterface $user
-   *   The Drupal user.
-   *
-   * @return string|null
-   *   The Xero Contact ID (GUID) or NULL if not found.
    */
   protected function getXeroContactId(UserInterface $user) {
-    // 1. Check local field on User entity.
     if ($user->hasField('field_xero_contact_id') && !$user->get('field_xero_contact_id')->isEmpty()) {
       return $user->get('field_xero_contact_id')->value;
     }
 
-    // 2. Fallback: Search Xero by Email.
     $email = $user->getEmail();
     if (!$email) {
       return NULL;
@@ -236,7 +290,6 @@ class SyncManager {
       if (!empty($data['Contacts']) && isset($data['Contacts'][0]['ContactID'])) {
         $contact_id = $data['Contacts'][0]['ContactID'];
         
-        // Save back to user for future use.
         if ($user->hasField('field_xero_contact_id')) {
           $user->set('field_xero_contact_id', $contact_id);
           $user->save();
@@ -255,11 +308,6 @@ class SyncManager {
 
   /**
    * Uploads attachments from the entity to the Xero Invoice.
-   *
-   * @param \Drupal\eck\Entity\EckEntityInterface $entity
-   *   The ECK entity.
-   * @param string $invoice_id
-   *   The Xero Invoice GUID.
    */
   protected function uploadAttachments(EckEntityInterface $entity, $invoice_id) {
     $attachment_field = $this->config->get('attachment_field') ?: 'field_attachment';
@@ -278,7 +326,6 @@ class SyncManager {
           $filename = $file->getFilename();
           $mime_type = $file->getMimeType();
           
-          // Xero Attachment Endpoint: POST /Invoices/{Guid}/Attachments/{Filename}
           $endpoint = "Invoices/$invoice_id/Attachments/" . rawurlencode($filename);
 
           $this->xeroClient->request('POST', $endpoint, [
@@ -300,6 +347,67 @@ class SyncManager {
             '@message' => $e->getMessage(),
           ]);
         }
+      }
+    }
+  }
+
+  /**
+   * Updates status for payment requests based on Xero status.
+   * 
+   * @param array $entities
+   *   Array of Payment Request entities to check.
+   */
+  public function updatePaymentStatuses(array $entities) {
+    if (empty($entities)) {
+      return;
+    }
+
+    // Collect Xero Invoice IDs.
+    $map = [];
+    foreach ($entities as $entity) {
+      if ($entity->hasField('field_xero_invoice_id') && !$entity->get('field_xero_invoice_id')->isEmpty()) {
+        $guid = $entity->get('field_xero_invoice_id')->value;
+        $map[$guid] = $entity;
+      }
+    }
+
+    if (empty($map)) {
+      return;
+    }
+
+    // Chunk into 40s to be safe with URL length limits.
+    $chunks = array_chunk(array_keys($map), 40);
+
+    foreach ($chunks as $guids) {
+      try {
+        $ids_string = implode(',', $guids);
+        $response = $this->xeroClient->request('GET', 'Invoices', [
+          'query' => [
+            'IDs' => $ids_string,
+            'Statuses' => 'PAID', // Only care about paid ones
+          ],
+          'headers' => ['Accept' => 'application/json']
+        ]);
+
+        $data = json_decode($response->getBody()->getContents(), TRUE);
+
+        if (!empty($data['Invoices'])) {
+          foreach ($data['Invoices'] as $invoice) {
+            $guid = $invoice['InvoiceID'];
+            if (isset($map[$guid])) {
+              $entity = $map[$guid];
+              // Update status to Paid.
+              if ($entity->hasField('field_status') && $entity->get('field_status')->value !== 'paid') {
+                $entity->set('field_status', 'paid');
+                $entity->save();
+                $this->logger->info('Updated Payment Request @id status to PAID (Xero Bill Paid).', ['@id' => $entity->id()]);
+              }
+            }
+          }
+        }
+      }
+      catch (\Exception $e) {
+        $this->logger->error('Failed to check payment statuses: @message', ['@message' => $e->getMessage()]);
       }
     }
   }

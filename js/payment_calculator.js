@@ -1,8 +1,7 @@
 (function ($, Drupal) {
   Drupal.behaviors.xeroPaymentCalculator = {
     attach: function (context, settings) {
-      // Selectors for the fields. Adjust if your machine names differ.
-      // We look for inputs ending in [0][value] to match standard Drupal field naming.
+      // Selectors for the fields.
       var $hoursInput = $('input[name^="field_hours"]', context);
       var $rateInput = $('input[name^="field_hourly_rate"]', context);
       var $amountInput = $('input[name^="field_amount"]', context);
@@ -23,8 +22,9 @@
         $hoursInput.on('keyup change', calculateTotal);
         $rateInput.on('keyup change', calculateTotal);
         
-        // Optional: Make amount readonly if you want to force the calc.
-        // $amountInput.attr('readonly', true); 
+        // Make amount readonly to prevent manual typos overriding the calculation.
+        $amountInput.prop('readonly', true);
+        $amountInput.addClass('is-readonly'); // Add class for optional styling
       }
     }
   };

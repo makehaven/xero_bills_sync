@@ -14,3 +14,11 @@ xero_bills_sync.add_request:
   requirements:
     _permission: 'access content'
     user: \d+
+
+xero_bills_sync.admin_add_request:
+  path: '/admin/payment-requests/add/{bundle}'
+  defaults:
+    _controller: '\Drupal\xero_bills_sync\Controller\PaymentRequestController::add'
+    _title: 'Create Payment Request'
+  requirements:
+    _permission: 'administer eck entities'

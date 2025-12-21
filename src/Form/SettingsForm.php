@@ -57,6 +57,21 @@ class SettingsForm extends ConfigFormBase {
   public function buildForm(array $form, FormStateInterface $form_state) {
     $config = $this->config('xero_bills_sync.settings');
 
+    $form['general'] = [
+      '#type' => 'details',
+      '#title' => $this->t('General Settings'),
+      '#open' => TRUE,
+    ];
+
+    $form['general']['default_hourly_rate'] = [
+      '#type' => 'number',
+      '#title' => $this->t('System Default Hourly Rate'),
+      '#description' => $this->t('The default hourly rate to use if a specific user does not have one set.'),
+      '#default_value' => $config->get('default_hourly_rate') ?: 25.00,
+      '#min' => 0,
+      '#step' => 0.01,
+    ];
+
     $form['eck'] = [
       '#type' => 'details',
       '#title' => $this->t('ECK Settings'),
@@ -102,6 +117,7 @@ class SettingsForm extends ConfigFormBase {
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
     $this->config('xero_bills_sync.settings')
+      ->set('default_hourly_rate', $form_state->getValue('default_hourly_rate'))
       ->set('attachment_field', $form_state->getValue('attachment_field'))
       ->set('mappings', $form_state->getValue('mappings'))
       ->save();

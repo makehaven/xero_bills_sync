@@ -13,7 +13,6 @@ use Drupal\user\Entity\User;
  */
 function xero_bills_sync_form_alter(&$form, FormStateInterface $form_state, $form_id) {
   // Target ECK entity forms. 
-  // Pattern usually: eck_entity_form (generic) or entity_type_bundle_form.
   $form_object = $form_state->getFormObject();
   if (!method_exists($form_object, 'getEntity')) {
     return;
@@ -24,34 +23,81 @@ function xero_bills_sync_form_alter(&$form, FormStateInterface $form_state, $for
     return;
   }
 
-  // 1. Payee Defaulting
-  if ($entity->isNew() && isset($form['field_payee'])) {
-    // If the field exists and has no value, default to current user.
-    if (empty($form['field_payee']['widget'][0]['target_id']['#default_value'])) {
-      $form['field_payee']['widget'][0]['target_id']['#default_value'] = User::load(\Drupal::currentUser()->id());
+  // 1. Payee Resolution & Warning
+  $payee_user = NULL;
+  if ($entity->isNew()) {
+    $payee_user = User::load(\Drupal::currentUser()->id());
+    // Auto-fill Payee
+    if (isset($form['field_payee']) && empty($form['field_payee']['widget'][0]['target_id']['#default_value'])) {
+      $form['field_payee']['widget'][0]['target_id']['#default_value'] = $payee_user;
+    }
+  }
+  else {
+    // On an edit form, determine the payee from the entity itself.
+    if ($entity->hasField('field_payee') && !$entity->get('field_payee')->isEmpty()) {
+      $payee_user = $entity->get('field_payee')->entity;
+    }
+    else {
+      $payee_user = $entity->getOwner();
     }
   }
 
-  // 2. Hide "Authored by" if Payee field exists (to avoid confusion).
-  // Only hide it if we are confident the user doesn't need to touch it.
+
+  // Check Xero Link
+  if ($payee_user) {
+    $has_xero_id = $payee_user->hasField('field_xero_contact_id') && !$payee_user->get('field_xero_contact_id')->isEmpty();
+    if (!$has_xero_id) {
+      \Drupal::messenger()->addWarning(t('This payee is not yet linked to Xero. Melio will request bank details via email after the first submission is processed.'));
+    }
+  }
+
+  // 2. Hide "Authored by" if Payee field exists
   if (isset($form['uid']) && isset($form['field_payee'])) {
     $form['uid']['#access'] = FALSE;
   }
 
-  // 3. Calculator Logic
-  // Attach the calculator library if the relevant fields exist.
+  // 3. Calculator Logic & Rate Defaulting
   if (isset($form['field_hours']) && isset($form['field_hourly_rate'])) {
     $form['#attached']['library'][] = 'xero_bills_sync/payment_calculator';
 
-    // Pre-fill Hourly Rate from User Profile if entity is new and field is empty.
-    if ($entity->isNew() && empty($entity->get('field_hourly_rate')->value)) {
-      $current_user = User::load(\Drupal::currentUser()->id());
-      if ($current_user->hasField('field_default_hourly_rate') && !$current_user->get('field_default_hourly_rate')->isEmpty()) {
-        $default_rate = $current_user->get('field_default_hourly_rate')->value;
-        if (isset($form['field_hourly_rate']['widget'][0]['value'])) {
-          $form['field_hourly_rate']['widget'][0]['value']['#default_value'] = $default_rate;
-        }
+    // Only set default value on new entities where the rate is not already set.
+    if ($entity->isNew() && empty($form['field_hourly_rate']['widget'][0]['value']['#default_value'])) {
+      $rate = NULL;
+      // 1. Try to get rate from the Payee's user profile.
+      if ($payee_user && $payee_user->hasField('field_default_hourly_rate') && !$payee_user->get('field_default_hourly_rate')->isEmpty()) {
+        $rate = $payee_user->get('field_default_hourly_rate')->value;
+      }
+      
+      // 2. Fallback to system-wide default if user has no rate.
+      if ($rate === NULL) {
+        $config = \Drupal::config('xero_bills_sync.settings');
+        $rate = $config->get('default_hourly_rate');
+      }
+
+      // Apply the rate to the form field.
+      if ($rate !== NULL) {
+        $form['field_hourly_rate']['widget'][0]['value']['#default_value'] = $rate;
       }
     }
+  }
+}
+
+/**
+ * Implements hook_cron().
+ */
+function xero_bills_sync_cron() {
+  // Query for submitted requests that have a Xero ID.
+  $storage = \Drupal::entityTypeManager()->getStorage('payment_request');
+  $query = $storage->getQuery()
+    ->accessCheck(FALSE)
+    ->condition('field_status', 'submitted')
+    ->condition('field_xero_invoice_id', NULL, 'IS NOT NULL')
+    ->range(0, 50); // Process in batches
+
+  $ids = $query->execute();
+
+  if (!empty($ids)) {
+    $entities = $storage->loadMultiple($ids);
+    \Drupal::service('xero_bills_sync.sync_manager')->updatePaymentStatuses($entities);
   }
 }
