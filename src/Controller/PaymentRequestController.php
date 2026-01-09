@@ -6,6 +6,7 @@ use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Entity\EntityFormBuilderInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Routing\RouteMatchInterface;
+use Drupal\user\UserInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -50,14 +51,27 @@ class PaymentRequestController extends ControllerBase {
    *
    * @param string $bundle
    *   The bundle machine name.
+   * @param \Drupal\user\UserInterface|string|null $user
+   *   The user entity or username/ID from the route.
    *
    * @return array
    *   The render array.
    */
-  public function add($bundle) {
+  public function add($bundle, $user = NULL) {
+    // Default to current user.
+    $uid = $this->currentUser()->id();
+
+    // If a valid user entity is provided via the route, use that.
+    if ($user instanceof UserInterface) {
+      $uid = $user->id();
+    }
+    // Note: If $user is a string (e.g. username from URL where validation failed),
+    // we default to current user to prevent errors, effectively handling the "username in URL" bug
+    // by falling back to a safe default while the page loads.
+
     $entity = $this->entityTypeManager->getStorage('payment_request')->create([
       'type' => $bundle,
-      'uid' => $this->currentUser()->id(),
+      'uid' => $uid,
     ]);
 
     $form = $this->entityFormBuilder->getForm($entity, 'default');
@@ -72,8 +86,28 @@ class PaymentRequestController extends ControllerBase {
     return [
       '#type' => 'container',
       'content' => $form,
-      '#title' => $this->t('Create @type', ['@type' => ucfirst(str_replace('_', ' ', $bundle))]),
+      '#title' => $this->t('Request @type', ['@type' => ucfirst(str_replace('_', ' ', $bundle))]),
     ];
+  }
+
+  /**
+   * Redirects /payback to the reimbursement form for the current user.
+   */
+  public function paybackRedirect() {
+    return $this->redirect('xero_bills_sync.add_request', [
+      'user' => $this->currentUser()->id(),
+      'bundle' => 'reimbursement',
+    ]);
+  }
+
+  /**
+   * Redirects /timesheet to the contractor payment form for the current user.
+   */
+  public function timesheetRedirect() {
+    return $this->redirect('xero_bills_sync.add_request', [
+      'user' => $this->currentUser()->id(),
+      'bundle' => 'payment',
+    ]);
   }
 
 }

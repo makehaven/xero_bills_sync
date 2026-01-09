@@ -1,0 +1,75 @@
+/* Payment Request View Styles */
+.view-payment-requests-user .views-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+  margin-top: 15px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.view-payment-requests-user .views-table thead th {
+  background-color: #f8f9fa;
+  color: #495057;
+  font-weight: 600;
+  padding: 16px;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid #e9ecef;
+}
+
+.view-payment-requests-user .views-table tbody td {
+  padding: 16px;
+  vertical-align: middle;
+  border-bottom: 1px solid #f1f3f5;
+  color: #343a40;
+  font-size: 0.95rem;
+}
+
+.view-payment-requests-user .views-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.view-payment-requests-user .views-table tbody tr:hover {
+  background-color: #fafafa;
+}
+
+/* Links in table */
+.view-payment-requests-user .views-table a {
+  color: #007bff;
+  text-decoration: none;
+  font-weight: 500;
+}
+.view-payment-requests-user .views-table a:hover {
+  text-decoration: underline;
+}
+
+/* Status Badges */
+.payment-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 50px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  line-height: 1;
+}
+
+.status-submitted { background: #e3f2fd; color: #0d47a1; } /* Blue */
+.status-paid { background: #e8f5e9; color: #1b5e20; } /* Green */
+.status-draft { background: #fff3e0; color: #e65100; } /* Orange */
+.status-rejected, .status-cancelled { background: #ffebee; color: #b71c1c; } /* Red */
+
+/* Responsive */
+@media (max-width: 768px) {
+  .view-payment-requests-user .views-table {
+    display: block;
+    overflow-x: auto;
+  }
+}

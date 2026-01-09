@@ -80,6 +80,175 @@ function xero_bills_sync_form_alter(&$form, FormStateInterface $form_state, $for
       }
     }
   }
+
+  // 4. Conditional Visibility for Associated Event
+  if (isset($form['field_event']) && isset($form['field_xero_account_id_reimburse'])) {
+    $event_account_codes = [
+      '6533', // Education Equipment
+      '6652', // Education Workshop Supply
+      '6653', // Education Individual Program
+      '6730', // Public Event Expenses
+      '6735', // Member Event Expense
+      '6564', // Contractual, Education Workshop Coordination
+      '6565', // Contractual, Education Program / Course
+      '6566', // Contractual, Workshop Instructors
+    ];
+
+    $conditions = [];
+    foreach ($event_account_codes as $code) {
+      $conditions[] = [':input[name="field_xero_account_id_reimburse"]' => ['value' => $code]];
+      $conditions[] = 'or';
+    }
+    // Remove the last 'or'
+    array_pop($conditions);
+
+    $form['field_event']['#states'] = [
+      'visible' => $conditions,
+    ];
+  }
+
+  // 5. Submit Button and Redirection
+  $form['actions']['submit']['#value'] = t('Submit Request');
+  $form['actions']['submit']['#submit'][] = 'xero_bills_sync_payment_request_submit';
+
+  // 6. Layout Tweaks via weights and classes
+  if (isset($form['field_payee'])) {
+    $form['field_payee']['#weight'] = -20;
+    $form['field_payee']['#attributes']['class'][] = 'payment-field-payee';
+  }
+
+  if (isset($form['field_amount'])) {
+    $form['field_amount']['#weight'] = -19;
+    $form['field_amount']['#attributes']['class'][] = 'payment-field-amount';
+  }
+
+  if (isset($form['field_description'])) {
+    $form['field_description']['#weight'] = -18;
+  }
+
+  // 7. Group Reimbursement Account Options
+  if (isset($form['field_xero_account_id_reimburse']['widget']['#options'])) {
+    $options = $form['field_xero_account_id_reimburse']['widget']['#options'];
+    $grouped_options = [];
+    
+    // Define Groups
+    $groups = [
+      'Shop & Facility' => ['140', '6329', '6364', '6365', '6370'],
+      'Education & Workshops' => ['6533', '6652', '6653'],
+      'Travel & Personnel' => ['6048', '6067', '6070', '6071', '6084', '6085'],
+      'Office & Admin' => ['6424', '6452', '6456', '6480', '6477'],
+      'Events & Marketing' => ['6700', '6730', '6735'],
+      'Miscellaneous' => ['6160', '6165', '6855', '6953'],
+    ];
+
+    // Keep "Select value" or _none if present
+    if (isset($options['_none'])) {
+      $grouped_options['_none'] = $options['_none'];
+    }
+
+    // Build groups
+    foreach ($groups as $group_name => $codes) {
+      foreach ($codes as $code) {
+        if (isset($options[$code])) {
+          $grouped_options[$group_name][$code] = $options[$code];
+        }
+      }
+    }
+    
+    // Catch-all for any unassigned codes
+    $all_codes = [];
+    foreach ($groups as $codes) {
+      $all_codes = array_merge($all_codes, $codes);
+    }
+    
+    foreach ($options as $key => $label) {
+      if ($key !== '_none' && !in_array($key, $all_codes)) {
+        $grouped_options['Other'][$key] = $label;
+      }
+    }
+
+    $form['field_xero_account_id_reimburse']['widget']['#options'] = $grouped_options;
+  }
+
+  // 8. Mileage Calculator Logic
+  if (isset($form['field_xero_account_id_reimburse'])) {
+    // Add Miles Input
+    $form['miles_wrapper'] = [
+      '#type' => 'container',
+      '#attributes' => [
+        'class' => ['miles-input-wrapper'], 
+        'style' => 'display:none; margin-bottom: 15px; background: #e9ecef; padding: 10px; border-radius: 4px; border: 1px solid #dee2e6;'
+      ],
+      '#weight' => -19.5, // Before Amount (-19)
+    ];
+    
+    $form['miles_wrapper']['miles_markup'] = [
+      '#markup' => '<div style="font-weight:bold; margin-bottom:5px;">' . t('Mileage Calculator') . '</div>',
+    ];
+
+    $form['miles_wrapper']['miles_input'] = [
+      '#type' => 'number',
+      '#title' => t('Total Miles'),
+      '#description' => t('Enter miles driven. Amount is calculated at $0.67/mile (2025 IRS Rate).'),
+      '#attributes' => ['step' => '0.1', 'min' => '0', 'class' => ['form-control'], 'style' => 'width: 150px; display:inline-block; margin-right: 10px;'],
+    ];
+
+    // Attach library
+    $form['#attached']['library'][] = 'xero_bills_sync/mileage_calculator';
+    $form['#attached']['drupalSettings']['xero_bills_sync']['mileage_rate'] = 0.67; 
+  }
+
+  // 5. Submit Button and Redirection (Restored)
+  $form['actions']['submit']['#value'] = t('Submit Request');
+  $form['actions']['submit']['#submit'][] = 'xero_bills_sync_payment_request_submit';
+
+  // 9. Mobile Camera Optimization for Attachments
+  if (isset($form['field_attachment']['widget'])) {
+    $widget = &$form['field_attachment']['widget'];
+    foreach (\Drupal\Core\Render\Element::children($widget) as $delta) {
+      // Add process callback to managed_file elements
+      if (isset($widget[$delta]['#type']) && $widget[$delta]['#type'] == 'managed_file') {
+        $widget[$delta]['#process'][] = 'xero_bills_sync_attachment_process';
+      }
+    }
+  }
+
+  // 10. Admin Status Access
+  // Allow admins to change status (e.g. if integration fails).
+  if (isset($form['field_status'])) {
+    $is_admin = \Drupal::currentUser()->hasPermission('administer eck entities') || \Drupal::currentUser()->hasPermission('administer site configuration');
+    if (!$is_admin) {
+      $form['field_status']['#access'] = FALSE;
+    }
+  }
+}
+
+/**
+ * Process callback to add 'accept' attribute for camera support.
+ */
+function xero_bills_sync_attachment_process($element, FormStateInterface $form_state, $form) {
+  if (isset($element['upload'])) {
+    // Adding image/* encourages mobile devices to offer the camera option.
+    $element['upload']['#attributes']['accept'] = 'image/*,application/pdf';
+  }
+  return $element;
+}
+
+/**
+ * Implements hook_views_pre_render().
+ */
+function xero_bills_sync_views_pre_render(\Drupal\views\ViewExecutable $view) {
+  if ($view->id() == 'payment_requests_user') {
+    $view->element['#attached']['library'][] = 'xero_bills_sync/payment_view_style';
+  }
+}
+
+/**
+ * Custom submit handler to redirect to user's payment requests.
+ */
+function xero_bills_sync_payment_request_submit($form, FormStateInterface $form_state) {
+  $uid = \Drupal::currentUser()->id();
+  $form_state->setRedirect('view.payment_requests_user.page_1', ['user' => $uid]);
 }
 
 /**

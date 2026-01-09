@@ -45,6 +45,32 @@
   display: block;
 }
 
+/* Payee and Amount Inline Layout */
+@media (min-width: 769px) {
+  .payment-request-compact-form .payment-field-payee,
+  .payment-request-compact-form .payment-field-amount {
+    display: inline-block;
+    vertical-align: top;
+    margin-bottom: 20px;
+  }
+
+  .payment-request-compact-form .payment-field-payee {
+    width: calc(75% - 20px);
+    margin-right: 20px;
+  }
+
+  .payment-request-compact-form .payment-field-amount {
+    width: 25%;
+  }
+}
+
+.payment-request-compact-form .payment-field-amount input {
+  font-weight: bold;
+  font-size: 1.2rem;
+  color: #2c3e50;
+  text-align: right;
+}
+
 /* Action buttons area */
 .payment-request-compact-form .form-actions {
   margin-top: 20px;

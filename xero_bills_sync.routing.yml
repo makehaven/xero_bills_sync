@@ -6,6 +6,22 @@ xero_bills_sync.settings_form:
   requirements:
     _permission: 'administer site configuration'
 
+xero_bills_sync.payback:
+  path: '/payback'
+  defaults:
+    _controller: '\Drupal\xero_bills_sync\Controller\PaymentRequestController::paybackRedirect'
+    _title: 'Request Reimbursement'
+  requirements:
+    _permission: 'access content'
+
+xero_bills_sync.timesheet:
+  path: '/timesheet'
+  defaults:
+    _controller: '\Drupal\xero_bills_sync\Controller\PaymentRequestController::timesheetRedirect'
+    _title: 'Submit Timesheet'
+  requirements:
+    _permission: 'access content'
+
 xero_bills_sync.add_request:
   path: '/user/{user}/payment-requests/add/{bundle}'
   defaults:
@@ -13,7 +29,6 @@ xero_bills_sync.add_request:
     _title: 'Create Payment Request'
   requirements:
     _permission: 'access content'
-    user: \d+
 
 xero_bills_sync.admin_add_request:
   path: '/admin/payment-requests/add/{bundle}'

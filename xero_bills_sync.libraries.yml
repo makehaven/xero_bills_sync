@@ -6,8 +6,23 @@ payment_calculator:
     - core/jquery
     - core/drupal
 
+mileage_calculator:
+  version: 1.x
+  js:
+    js/mileage_calculator.js: {}
+  dependencies:
+    - core/jquery
+    - core/drupal
+    - core/drupalSettings
+
 payment_form_style:
   version: 1.x
   css:
     theme:
       css/payment_form.css: {}
+
+payment_view_style:
+  version: 1.x
+  css:
+    theme:
+      css/payment_view.css: {}
