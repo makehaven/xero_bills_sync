@@ -2,10 +2,11 @@ name: 'Xero Bills Sync'
 type: module
 description: 'Syncs ECK payment requests to Xero as Accounts Payable Bills.'
 core_version_requirement: ^10 || ^11
-package: Custom
+package: Makerspace
 dependencies:
   - eck:eck
   - xero:xero
   - hook_event_dispatcher:core_event_dispatcher
   - drupal:user
   - drupal:views
+configure: xero_bills_sync.settings_form
