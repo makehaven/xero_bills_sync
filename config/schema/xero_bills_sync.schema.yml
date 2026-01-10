@@ -1,0 +1,23 @@
+xero_bills_sync.settings:
+  type: config_object
+  label: 'Xero Bills Sync settings'
+  mapping:
+    attachment_field:
+      type: string
+      label: 'Attachment field'
+    default_hourly_rate:
+      type: float
+      label: 'Default hourly rate'
+    sync_enabled:
+      type: boolean
+      label: 'Enable Xero sync'
+    sync_backlog:
+      type: boolean
+      label: 'Backfill existing submitted requests'
+    mappings:
+      type: mapping
+      label: 'Bundle to account code mappings'
+      mapping:
+        '*':
+          type: string
+          label: 'Account code'

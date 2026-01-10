@@ -45,8 +45,9 @@ function xero_bills_sync_form_alter(&$form, FormStateInterface $form_state, $for
 
   // Check Xero Link
   if ($payee_user) {
+    $sync_enabled = (bool) \Drupal::config('xero_bills_sync.settings')->get('sync_enabled');
     $has_xero_id = $payee_user->hasField('field_xero_contact_id') && !$payee_user->get('field_xero_contact_id')->isEmpty();
-    if (!$has_xero_id) {
+    if ($sync_enabled && !$has_xero_id) {
       \Drupal::messenger()->addWarning(t('This payee is not yet linked to Xero. Melio will request bank details via email after the first submission is processed.'));
     }
   }
@@ -216,8 +217,11 @@ function xero_bills_sync_form_alter(&$form, FormStateInterface $form_state, $for
   // 10. Admin Status Access
   // Allow admins to change status (e.g. if integration fails).
   if (isset($form['field_status'])) {
-    $is_admin = \Drupal::currentUser()->hasPermission('administer eck entities') || \Drupal::currentUser()->hasPermission('administer site configuration');
-    if (!$is_admin) {
+    $account = \Drupal::currentUser();
+    $can_edit_status = $account->hasPermission('administer eck entities')
+      || $account->hasPermission('administer site configuration')
+      || $account->hasPermission('manage payment request status');
+    if (!$can_edit_status) {
       $form['field_status']['#access'] = FALSE;
     }
   }
@@ -255,6 +259,10 @@ function xero_bills_sync_payment_request_submit($form, FormStateInterface $form_
  * Implements hook_cron().
  */
 function xero_bills_sync_cron() {
+  $config = \Drupal::config('xero_bills_sync.settings');
+  $sync_enabled = (bool) $config->get('sync_enabled');
+  $sync_backlog = (bool) $config->get('sync_backlog');
+
   // Query for submitted requests that have a Xero ID.
   $storage = \Drupal::entityTypeManager()->getStorage('payment_request');
   $query = $storage->getQuery()
@@ -268,5 +276,9 @@ function xero_bills_sync_cron() {
   if (!empty($ids)) {
     $entities = $storage->loadMultiple($ids);
     \Drupal::service('xero_bills_sync.sync_manager')->updatePaymentStatuses($entities);
+  }
+
+  if ($sync_enabled && $sync_backlog) {
+    \Drupal::service('xero_bills_sync.sync_manager')->syncBacklog(50);
   }
 }

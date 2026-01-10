@@ -18,7 +18,7 @@ class SyncManager {
   /**
    * The Xero Client service.
    *
-   * @var mixed
+   * @var mixed|null
    */
   protected $xeroClient;
 
@@ -74,6 +74,15 @@ class SyncManager {
    *   The payment request entity.
    */
   public function syncPaymentRequest(EckEntityInterface $entity) {
+    if (!$this->isSyncEnabled()) {
+      return;
+    }
+
+    if (!$this->xeroClient) {
+      $this->logger->error('Xero sync is enabled, but the Xero client service is unavailable.');
+      return;
+    }
+
     // Ensure we are dealing with the correct entity type.
     if ($entity->getEntityTypeId() !== 'payment_request') {
       return;
@@ -270,6 +279,10 @@ class SyncManager {
    * Retrieves the Xero Contact ID for a Drupal user.
    */
   protected function getXeroContactId(UserInterface $user) {
+    if (!$this->xeroClient) {
+      return NULL;
+    }
+
     if ($user->hasField('field_xero_contact_id') && !$user->get('field_xero_contact_id')->isEmpty()) {
       return $user->get('field_xero_contact_id')->value;
     }
@@ -358,6 +371,10 @@ class SyncManager {
    *   Array of Payment Request entities to check.
    */
   public function updatePaymentStatuses(array $entities) {
+    if (!$this->isSyncEnabled() || !$this->xeroClient) {
+      return;
+    }
+
     if (empty($entities)) {
       return;
     }
@@ -410,5 +427,49 @@ class SyncManager {
         $this->logger->error('Failed to check payment statuses: @message', ['@message' => $e->getMessage()]);
       }
     }
+  }
+
+  /**
+   * Syncs submitted requests that do not yet have a Xero Invoice ID.
+   *
+   * @param int $limit
+   *   Maximum number of entities to process.
+   *
+   * @return int
+   *   Number of entities processed.
+   */
+  public function syncBacklog($limit = 50) {
+    if (!$this->isSyncEnabled()) {
+      return 0;
+    }
+
+    $storage = $this->entityTypeManager->getStorage('payment_request');
+    $ids = $storage->getQuery()
+      ->accessCheck(FALSE)
+      ->condition('field_status', 'submitted')
+      ->condition('field_xero_invoice_id', NULL, 'IS NULL')
+      ->range(0, (int) $limit)
+      ->execute();
+
+    if (empty($ids)) {
+      return 0;
+    }
+
+    $entities = $storage->loadMultiple($ids);
+    foreach ($entities as $entity) {
+      $this->syncPaymentRequest($entity);
+    }
+
+    return count($entities);
+  }
+
+  /**
+   * Determines if sync should run based on configuration.
+   *
+   * @return bool
+   *   TRUE if sync is enabled.
+   */
+  protected function isSyncEnabled() {
+    return (bool) $this->config->get('sync_enabled');
   }
 }

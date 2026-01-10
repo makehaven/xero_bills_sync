@@ -5,8 +5,8 @@ This module automates the creation of Xero Accounts Payable (ACCPAY) Bills from 
 ## Prerequisites
 
 *   **ECK (Entity Construction Kit)** module
-*   **Xero** module (configured with OAuth 2.0 credentials)
 *   **Hook Event Dispatcher** module (specifically `core_event_dispatcher`)
+*   **Xero** module (optional; required only when you enable sync)
 
 ## Installation
 
@@ -75,6 +75,9 @@ To allow assigning requests to others or selecting specific Xero accounts:
 1.  Go to **Configuration > Web Services > Xero Bills Sync** (`/admin/config/services/xero-bills-sync`).
 2.  **Attachment Field:** Confirm this matches the field name you created above (default: `field_attachment`).
 3.  **Bundle Mappings:** Enter the Xero General Ledger Account Code (e.g., `600`, `610`) for each bundle.
+4.  **Enable Xero synchronization:** Leave this off until OAuth is configured.
+5.  **Backfill submitted requests:** Enable this if you want cron to sync older submitted requests once integration is live.
+6.  **Run backfill now:** Use the button to trigger an immediate one-time sync of submitted requests (up to 50 at a time).
 
 ## How it Works
 
@@ -102,5 +105,6 @@ The module provides two Views for management:
 *   **Staff Overview:** `/admin/content/payment-requests`
     *   Lists all requests system-wide.
     *   Filterable by status and type.
+    *   Status can be edited inline if the role has **Use editable fields** and **Manage payment request status** permissions.
 *   **User Dashboard:** `/user/me/payment-requests` (Tab on User Profile)
     *   Shows the logged-in user's history of requests.

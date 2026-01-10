@@ -1,0 +1,3 @@
+manage payment request status:
+  title: 'Manage payment request status'
+  description: 'Allow users to edit the status of payment requests.'

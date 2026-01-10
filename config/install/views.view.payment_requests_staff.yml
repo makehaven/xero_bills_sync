@@ -2,6 +2,7 @@ langcode: en
 status: true
 dependencies:
   module:
+    - editablefields
     - eck
     - user
     - views
@@ -296,9 +297,17 @@ display:
           empty_zero: false
           hide_alter_empty: true
           click_sort_column: value
-          type: string
+          type: editablefields_formatter
           settings:
-            link_to_entity: false
+            form_mode: default
+            behaviour: popup
+            bypass_access: 0
+            fallback_access: 0
+            display_mode_access: default
+            fallback_edit: 1
+            display_mode_edit: default
+            fields_ajax_trigger: ''
+            fields_ajax_trigger_event: change
           group_column: value
           group_columns: {  }
           group_rows: true

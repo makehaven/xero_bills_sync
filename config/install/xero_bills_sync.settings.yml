@@ -1,5 +1,7 @@
 attachment_field: 'field_attachment'
 default_hourly_rate: 25.00
+sync_enabled: false
+sync_backlog: false
 mappings:
   reimbursement: '610'
   payment: '600'

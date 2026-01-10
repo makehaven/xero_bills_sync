@@ -5,7 +5,6 @@ core_version_requirement: ^10 || ^11
 package: Makerspace
 dependencies:
   - eck:eck
-  - xero:xero
   - hook_event_dispatcher:core_event_dispatcher
   - drupal:user
   - drupal:views
