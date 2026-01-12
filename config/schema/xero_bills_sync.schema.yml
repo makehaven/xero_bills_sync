@@ -21,3 +21,9 @@ xero_bills_sync.settings:
         '*':
           type: string
           label: 'Account code'
+    reimbursement_instructions:
+      type: text_format
+      label: 'Reimbursement form instructions'
+    hours_instructions:
+      type: text_format
+      label: 'Hours-based payment form instructions'

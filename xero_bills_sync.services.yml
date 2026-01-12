@@ -2,7 +2,7 @@ services:
   xero_bills_sync.sync_manager:
     class: Drupal\xero_bills_sync\Service\SyncManager
     arguments:
-      - '@?xero.client'
+      - '@service_container'
       - '@entity_type.manager'
       - '@logger.factory'
       - '@config.factory'

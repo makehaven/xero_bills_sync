@@ -1,0 +1,3 @@
+Created ID: 4
+Output:
+TypeError: Drupal\Core\Render\Renderer::doRenderRoot(): Argument #1 ($elements) must be of type array, null given, called in /app/web/core/lib/Drupal/Core/Render/Renderer.php on line 143 in Drupal\Core\Render\Renderer->doRenderRoot() (line 236 of /app/web/core/lib/Drupal/Core/Render/Renderer.php).

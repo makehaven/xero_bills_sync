@@ -23,6 +23,34 @@ function xero_bills_sync_form_alter(&$form, FormStateInterface $form_state, $for
     return;
   }
 
+  $config = \Drupal::config('xero_bills_sync.settings');
+
+  $reimbursement_instructions = $config->get('reimbursement_instructions');
+  $hours_instructions = $config->get('hours_instructions');
+  $instructions = NULL;
+
+  if ($entity->bundle() === 'reimbursement' && !empty($reimbursement_instructions['value'])) {
+    $instructions = $reimbursement_instructions;
+  }
+  elseif (isset($form['field_hours']) && isset($form['field_hourly_rate']) && !empty($hours_instructions['value'])) {
+    $instructions = $hours_instructions;
+  }
+
+  if ($instructions) {
+    $form['xero_bills_sync_instructions'] = [
+      '#type' => 'container',
+      '#attributes' => [
+        'class' => ['xero-bills-sync-instructions'],
+      ],
+      '#weight' => -25,
+    ];
+    $form['xero_bills_sync_instructions']['text'] = [
+      '#type' => 'processed_text',
+      '#text' => $instructions['value'],
+      '#format' => $instructions['format'] ?? 'basic_html',
+    ];
+  }
+
   // 1. Payee Resolution & Warning
   $payee_user = NULL;
   if ($entity->isNew()) {
@@ -71,8 +99,7 @@ function xero_bills_sync_form_alter(&$form, FormStateInterface $form_state, $for
       
       // 2. Fallback to system-wide default if user has no rate.
       if ($rate === NULL) {
-        $config = \Drupal::config('xero_bills_sync.settings');
-        $rate = $config->get('default_hourly_rate');
+      $rate = $config->get('default_hourly_rate');
       }
 
       // Apply the rate to the form field.
@@ -247,6 +274,8 @@ function xero_bills_sync_views_pre_render(\Drupal\views\ViewExecutable $view) {
   }
 }
 
+
+
 /**
  * Custom submit handler to redirect to user's payment requests.
  */
@@ -281,4 +310,32 @@ function xero_bills_sync_cron() {
   if ($sync_enabled && $sync_backlog) {
     \Drupal::service('xero_bills_sync.sync_manager')->syncBacklog(50);
   }
+}
+
+/**
+ * Implements hook_entity_operation().
+ */
+function xero_bills_sync_entity_operation(\Drupal\Core\Entity\EntityInterface $entity) {
+  $operations = [];
+  if ($entity->getEntityTypeId() == 'payment_request') {
+    $account = \Drupal::currentUser();
+    
+    // Check permission.
+    if (!$account->hasPermission('manage payment request status') && !$account->hasPermission('administer eck entities')) {
+      return $operations;
+    }
+
+    // Check if eligible for sync (submitted and not yet synced).
+    $is_submitted = $entity->hasField('field_status') && $entity->get('field_status')->value === 'submitted';
+    $is_synced = $entity->hasField('field_xero_invoice_id') && !$entity->get('field_xero_invoice_id')->isEmpty();
+
+    if ($is_submitted && !$is_synced) {
+      $operations['xero_sync'] = [
+        'title' => t('Sync to Xero'),
+        'weight' => 100,
+        'url' => \Drupal\Core\Url::fromRoute('xero_bills_sync.manual_sync', ['payment_request' => $entity->id()]),
+      ];
+    }
+  }
+  return $operations;
 }

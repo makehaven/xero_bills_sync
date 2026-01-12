@@ -5,3 +5,13 @@ sync_backlog: false
 mappings:
   reimbursement: '610'
   payment: '600'
+reimbursement_instructions:
+  value: |
+    <p>If you have purchased something with your own money that was an approved MakeHaven expense please log it here to request payment.</p>
+    <p>Anything above $50 must be approved by JR in writing. Anything $50 or less can be approved by any staff or board member.</p>
+    <p>Cleaning supplies are pre approved up to $50.</p>
+    <p>If you are submitting mileage, MakeHaven MUST have proof of insurance on file within the last year. Email this document to staff@makehaven.org or upload below. We use IRS set rates (business): <a href="https://www.irs.gov/tax-professionals/standard-mileage-rates">https://www.irs.gov/tax-professionals/standard-mileage-rates</a></p>
+  format: basic_html
+hours_instructions:
+  value: ''
+  format: basic_html

@@ -140,6 +140,28 @@ class SettingsForm extends ConfigFormBase {
       ];
     }
 
+    $form['instructions'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Form Instructions'),
+      '#open' => TRUE,
+    ];
+
+    $form['instructions']['reimbursement_instructions'] = [
+      '#type' => 'text_format',
+      '#title' => $this->t('Reimbursement instructions'),
+      '#description' => $this->t('Shown above the reimbursement request form.'),
+      '#default_value' => $config->get('reimbursement_instructions.value') ?: '',
+      '#format' => $config->get('reimbursement_instructions.format') ?: 'basic_html',
+    ];
+
+    $form['instructions']['hours_instructions'] = [
+      '#type' => 'text_format',
+      '#title' => $this->t('Hours-based payment instructions'),
+      '#description' => $this->t('Shown above forms that include hours and hourly rate fields.'),
+      '#default_value' => $config->get('hours_instructions.value') ?: '',
+      '#format' => $config->get('hours_instructions.format') ?: 'basic_html',
+    ];
+
     $form = parent::buildForm($form, $form_state);
 
     $form['actions']['backfill_now'] = [
@@ -161,6 +183,8 @@ class SettingsForm extends ConfigFormBase {
       ->set('sync_enabled', (bool) $form_state->getValue('sync_enabled'))
       ->set('sync_backlog', (bool) $form_state->getValue('sync_backlog'))
       ->set('mappings', $form_state->getValue('mappings'))
+      ->set('reimbursement_instructions', $form_state->getValue('reimbursement_instructions'))
+      ->set('hours_instructions', $form_state->getValue('hours_instructions'))
       ->save();
 
     parent::submitForm($form, $form_state);

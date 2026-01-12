@@ -37,3 +37,12 @@ xero_bills_sync.admin_add_request:
     _title: 'Create Payment Request'
   requirements:
     _permission: 'administer eck entities'
+
+xero_bills_sync.manual_sync:
+  path: '/admin/payment-request/{payment_request}/sync'
+  defaults:
+    _controller: '\Drupal\xero_bills_sync\Controller\ManualSyncController::sync'
+    _title: 'Sync to Xero'
+  requirements:
+    _permission: 'manage payment request status'
+    payment_request: \d+

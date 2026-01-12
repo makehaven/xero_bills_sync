@@ -3,17 +3,26 @@
 namespace Drupal\xero_bills_sync\Service;
 
 use Drupal\Core\Config\ConfigFactoryInterface;
+use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\File\FileSystemInterface;
 use Drupal\Core\Logger\LoggerChannelFactoryInterface;
 use Drupal\eck\Entity\EckEntityInterface;
 use Drupal\file\Entity\File;
 use Drupal\user\UserInterface;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * Handles synchronization of payment requests to Xero.
  */
 class SyncManager {
+
+  /**
+   * The Service Container.
+   *
+   * @var \Symfony\Component\DependencyInjection\ContainerInterface
+   */
+  protected $container;
 
   /**
    * The Xero Client service.
@@ -54,13 +63,13 @@ class SyncManager {
    * Constructs a new SyncManager object.
    */
   public function __construct(
-    $xero_client,
+    ContainerInterface $container,
     EntityTypeManagerInterface $entity_type_manager,
     LoggerChannelFactoryInterface $logger_factory,
     ConfigFactoryInterface $config_factory,
     FileSystemInterface $file_system
   ) {
-    $this->xeroClient = $xero_client;
+    $this->container = $container;
     $this->entityTypeManager = $entity_type_manager;
     $this->logger = $logger_factory->get('xero_bills_sync');
     $this->config = $config_factory->get('xero_bills_sync.settings');
@@ -68,34 +77,55 @@ class SyncManager {
   }
 
   /**
-   * Syncs an ECK payment request entity to Xero.
+   * Initializes the Xero client.
    *
-   * @param \Drupal\eck\Entity\EckEntityInterface $entity
-   *   The payment request entity.
+   * @return bool
+   *   TRUE if client is available, FALSE otherwise.
    */
-  public function syncPaymentRequest(EckEntityInterface $entity) {
-    if (!$this->isSyncEnabled()) {
-      return;
+  protected function initClient() {
+    if ($this->xeroClient) {
+      return TRUE;
     }
 
-    if (!$this->xeroClient) {
-      $this->logger->error('Xero sync is enabled, but the Xero client service is unavailable.');
-      return;
+    try {
+      $this->xeroClient = $this->container->get('xero.client');
+      return TRUE;
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Failed to initialize Xero Client: @message', ['@message' => $e->getMessage()]);
+      \Drupal::messenger()->addError(t('Xero Authorization Error: @message. Please authorize Xero at /admin/config/services/xero', ['@message' => $e->getMessage()]));
+      return FALSE;
+    }
+  }
+
+  /**
+   * Syncs an ECK payment request entity to Xero.
+   *
+   * @param \Drupal\Core\Entity\EntityInterface $entity
+   *   The payment request entity.
+   */
+  public function syncPaymentRequest(EntityInterface $entity) {
+    if (!$this->isSyncEnabled()) {
+      return FALSE;
+    }
+
+    if (!$this->initClient()) {
+      return FALSE;
     }
 
     // Ensure we are dealing with the correct entity type.
     if ($entity->getEntityTypeId() !== 'payment_request') {
-      return;
+      return FALSE;
     }
 
     // Check if already synced.
     if ($entity->hasField('field_xero_invoice_id') && !$entity->get('field_xero_invoice_id')->isEmpty()) {
-      return;
+      return FALSE;
     }
 
     // Check status.
     if ($entity->hasField('field_status') && $entity->get('field_status')->value !== 'submitted') {
-      return;
+      return FALSE;
     }
 
     // Determine the Payee (User).
@@ -103,7 +133,7 @@ class SyncManager {
 
     if (!$payee instanceof UserInterface) {
       $this->logger->error('Payment request @id has no valid payee or owner.', ['@id' => $entity->id()]);
-      return;
+      return FALSE;
     }
 
     // Duplicate Guardrail
@@ -113,7 +143,7 @@ class SyncManager {
         '@uid' => $payee->id(),
         '@amount' => $entity->get('field_amount')->value,
       ]);
-      return;
+      return FALSE;
     }
 
     $xero_contact_id = $this->getXeroContactId($payee);
@@ -123,7 +153,7 @@ class SyncManager {
         '@user' => $payee->getDisplayName(),
         '@uid' => $payee->id(),
       ]);
-      return;
+      return FALSE;
     }
 
     // Determine Account Code.
@@ -201,23 +231,27 @@ class SyncManager {
 
         // Handle Attachments.
         $this->uploadAttachments($entity, $invoice_id);
+        
+        return TRUE;
       }
       else {
         $this->logger->error('Failed to create Xero Bill for payment request @id. Response: @response', [
           '@id' => $entity->id(),
           '@response' => print_r($response_body, TRUE)
         ]);
+        return FALSE;
       }
     }
     catch (\Exception $e) {
       $this->logger->error('Error syncing to Xero: @message', ['@message' => $e->getMessage()]);
+      return FALSE;
     }
   }
 
   /**
    * Checks for duplicate requests in the last 24 hours.
    * 
-   * @param \Drupal\eck\Entity\EckEntityInterface $entity
+   * @param \Drupal\Core\Entity\EntityInterface $entity
    *   The current request.
    * @param \Drupal\user\UserInterface $payee
    *   The resolved payee.
@@ -225,7 +259,7 @@ class SyncManager {
    * @return bool
    *   TRUE if a duplicate exists, FALSE otherwise.
    */
-  protected function checkDuplicate(EckEntityInterface $entity, UserInterface $payee) {
+  protected function checkDuplicate(EntityInterface $entity, UserInterface $payee) {
     if (!$entity->hasField('field_amount')) {
       return FALSE;
     }
@@ -263,7 +297,7 @@ class SyncManager {
   /**
    * Helper to resolve the payee from an entity.
    */
-  protected function resolvePayee(EckEntityInterface $entity) {
+  protected function resolvePayee(EntityInterface $entity) {
     $payee = NULL;
     if ($entity->hasField('field_payee') && !$entity->get('field_payee')->isEmpty()) {
       $payee = $entity->get('field_payee')->entity;
@@ -279,7 +313,7 @@ class SyncManager {
    * Retrieves the Xero Contact ID for a Drupal user.
    */
   protected function getXeroContactId(UserInterface $user) {
-    if (!$this->xeroClient) {
+    if (!$this->initClient()) {
       return NULL;
     }
 
@@ -316,13 +350,51 @@ class SyncManager {
       $this->logger->error('Failed to search Xero contacts by email: @message', ['@message' => $e->getMessage()]);
     }
 
+    // Attempt to create a new Contact if not found.
+    try {
+      $contact_data = [
+        'Name' => $user->getDisplayName(),
+        'EmailAddress' => $email,
+      ];
+
+      // Use PUT to create (idempotent for some APIs, but Xero usually wants PUT for create/update batches).
+      $payload = [
+        'Contacts' => [$contact_data]
+      ];
+
+      $response = $this->xeroClient->request('PUT', 'Contacts', [
+        'json' => $payload,
+        'headers' => ['Accept' => 'application/json']
+      ]);
+
+      $data = json_decode($response->getBody()->getContents(), TRUE);
+
+      if (!empty($data['Contacts']) && isset($data['Contacts'][0]['ContactID'])) {
+        $contact_id = $data['Contacts'][0]['ContactID'];
+        
+        if ($user->hasField('field_xero_contact_id')) {
+          $user->set('field_xero_contact_id', $contact_id);
+          $user->save();
+          $this->logger->notice('Created new Xero Contact @cid for User @uid.', ['@cid' => $contact_id, '@uid' => $user->id()]);
+        }
+        
+        return $contact_id;
+      }
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Failed to create Xero Contact for @user: @message', [
+        '@user' => $user->getDisplayName(),
+        '@message' => $e->getMessage()
+      ]);
+    }
+
     return NULL;
   }
 
   /**
    * Uploads attachments from the entity to the Xero Invoice.
    */
-  protected function uploadAttachments(EckEntityInterface $entity, $invoice_id) {
+  protected function uploadAttachments(EntityInterface $entity, $invoice_id) {
     $attachment_field = $this->config->get('attachment_field') ?: 'field_attachment';
     
     if (!$entity->hasField($attachment_field) || $entity->get($attachment_field)->isEmpty()) {
@@ -371,7 +443,11 @@ class SyncManager {
    *   Array of Payment Request entities to check.
    */
   public function updatePaymentStatuses(array $entities) {
-    if (!$this->isSyncEnabled() || !$this->xeroClient) {
+    if (!$this->isSyncEnabled()) {
+      return;
+    }
+
+    if (!$this->initClient()) {
       return;
     }
 
