@@ -5,6 +5,7 @@
       var $hoursInput = $('input[name^="field_hours"]', context);
       var $rateInput = $('input[name^="field_hourly_rate"]', context);
       var $amountInput = $('input[name^="field_amount"]', context);
+      var $totalDisplay = $('.payment-calc-total', context);
 
       function calculateTotal() {
         var hours = parseFloat($hoursInput.val()) || 0;
@@ -15,6 +16,7 @@
         var total = (hours * rate).toFixed(2);
         
         $amountInput.val(total);
+        $totalDisplay.text('$ ' + total);
       }
 
       // Attach change/keyup events.

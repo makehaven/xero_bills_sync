@@ -89,6 +89,19 @@ function xero_bills_sync_form_alter(&$form, FormStateInterface $form_state, $for
   if (isset($form['field_hours']) && isset($form['field_hourly_rate'])) {
     $form['#attached']['library'][] = 'xero_bills_sync/payment_calculator';
 
+    // Add visual total display
+    $form['calculator_total'] = [
+      '#type' => 'item',
+      '#title' => t('Calculated Total'),
+      '#markup' => '<div class="payment-calc-total" style="font-size: 1.2em; font-weight: bold;">$ 0.00</div>',
+      '#weight' => -18.5,
+    ];
+
+    // Ensure field_amount is visible if it exists (fixes permission/visibility issues)
+    if (isset($form['field_amount'])) {
+      $form['field_amount']['#access'] = TRUE;
+    }
+
     // Only set default value on new entities where the rate is not already set.
     if ($entity->isNew() && empty($form['field_hourly_rate']['widget'][0]['value']['#default_value'])) {
       $rate = NULL;
